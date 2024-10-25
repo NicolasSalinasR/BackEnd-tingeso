@@ -2,52 +2,45 @@ pipeline {
     agent any
     tools {
         maven 'maven_3_8_1'
+        jdk 'jdk17' // Asumiendo que estás usando Java 17, asegúrate de que este nombre coincida con tu configuración de Jenkins
     }
     stages {
         stage('Checkout SCM') {
             steps {
-                checkout scm // Simplificado para usar la configuración del job
+                checkout scm
             }
         }
 
         stage('Build Maven') {
             steps {
-                script {
-                    dir('backend') { // Asegúrate de que el pom.xml esté en esta carpeta
-                        bat 'mvn clean package'
-                    }
+                dir('backend') {
+                    bat 'mvn clean package'
                 }
             }
         }
 
         stage('Unit Tests') {
             steps {
-                script {
-                    dir('backend') { // Asegúrate de que el pom.xml esté en esta carpeta
-                        bat 'mvn test'
-                    }
+                dir('backend') {
+                    bat 'mvn test'
                 }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    dir('backend') { // Asegúrate de que el Dockerfile esté en esta carpeta
-                        bat 'docker build -t haruhisomu/backend:latest .'
-                    }
+                dir('backend') {
+                    bat 'docker build -t haruhisomu/backend:latest .'
                 }
             }
         }
 
         stage('Push Image to Docker Hub') {
             steps {
-                script {
-                    withCredentials([string(credentialsId: 'dockerPass', variable: 'DOCKER_HUB_PASSWORD')]) {
-                        bat 'docker login -u haruhisomu -p %DOCKER_HUB_PASSWORD%'
-                    }
-                    bat 'docker push haruhisomu/backend:latest'
+                withCredentials([string(credentialsId: 'dockerPass', variable: 'DOCKER_HUB_PASSWORD')]) {
+                    bat 'docker login -u haruhisomu -p %DOCKER_HUB_PASSWORD%'
                 }
+                bat 'docker push haruhisomu/backend:latest'
             }
         }
     }
