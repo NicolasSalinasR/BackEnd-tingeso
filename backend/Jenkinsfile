@@ -2,7 +2,7 @@ pipeline {
     agent any
     tools {
         maven 'maven_3_8_1'
-        jdk 'java 17' // Asumiendo que estás usando Java 17, asegúrate de que este nombre coincida con tu configuración de Jenkins
+        jdk 'jdk_17' // Asumiendo que estás usando Java 17, asegúrate de que este nombre coincida con tu configuración de Jenkins
     }
     stages {
         stage('Checkout SCM') {
