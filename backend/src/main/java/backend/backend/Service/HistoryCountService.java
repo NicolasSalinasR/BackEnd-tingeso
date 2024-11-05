@@ -13,6 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,11 +27,20 @@ public class HistoryCountService {
 
 
     public HistoryCountEntity addHistoryCount(HistoryCountEntity historyCountEntity) {
+
+        if (historyCountEntity == null) {
+            throw new IllegalArgumentException("El parámetro historyCount no puede ser null.");
+        }
         return historyCountRepository.save(historyCountEntity);
     }
 
     public HistoryCountEntity getHistoryCount(Long id) {
-    return historyCountRepository.findById(id).orElse(null);
+
+
+        if (id == null) {
+            throw new IllegalArgumentException("El parámetro id no puede ser null.");
+        }
+        return historyCountRepository.findById(id).orElse(null);
     }
 
 
@@ -100,21 +110,32 @@ public class HistoryCountService {
             }
         }
 
-        // Obtener el salario del cliente actual
-        ClientEntity clientActualy = clientRepository.findById(clientId);
+        // Obtener el cliente actual
+        Optional<ClientEntity> clientOpt = Optional.ofNullable(clientRepository.findById(clientId)); // Cambiado a Optional
 
-        // Verificar la primera condición (si el total de dinero es al menos el 5% del salario)
-        int Money = clientActualy.getSalary();
-        if (totalOfMoney >= Money * 0.05) {
-            condition1 = true;
+        // Verificar si el cliente está presente
+        if (clientOpt.isPresent()) {
+            ClientEntity clientActualy = clientOpt.get(); // Obtener el cliente
+
+            // Obtener el salario del cliente actual
+            int Money = clientActualy.getSalary();
+
+            // Verificar la primera condición (si el total de dinero es al menos el 5% del salario)
+            if (totalOfMoney >= Money * 0.05) {
+                condition1 = true;
+            }
+
+            // Comprobar si se realizaron depósitos trimestrales
+            boolean quarterlyDeposits = hasQuarterlyDeposits(newList);
+
+            // Retornar true si condition1 es true y se realizaron depósitos trimestrales
+            return condition1 && quarterlyDeposits;
+        } else {
+            // Manejar el caso donde el cliente no existe (puedes lanzar una excepción o retornar false)
+            return false;
         }
-
-        // Comprobar si se realizaron depósitos trimestrales
-        boolean quarterlyDeposits = hasQuarterlyDeposits(newList);
-
-        // Retornar true si condition1 es true y se realizaron depósitos trimestrales
-        return condition1 && quarterlyDeposits;
     }
+
 
     public boolean R74(long clientId, int older, int amount) {
         List<HistoryCountEntity> historyCounts = historyCountRepository.findAllByClientid(clientId);
@@ -189,7 +210,7 @@ public class HistoryCountService {
     
 
     // Función para verificar si se realizaron depósitos trimestrales
-    private boolean hasQuarterlyDeposits(List<HistoryCountEntity> transactions) {
+    public boolean hasQuarterlyDeposits(List<HistoryCountEntity> transactions) {
         // Filtrar los depósitos (Change > 0) y agrupar por año y trimestre
         Map<Integer, Map<Integer, List<HistoryCountEntity>>> depositsByQuarter = transactions.stream()
                 .filter(transaction -> transaction.getChange() > 0)  // Filtrar los depósitos

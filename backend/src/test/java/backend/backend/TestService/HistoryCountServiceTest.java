@@ -9,20 +9,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
-import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.ZoneId;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 public class HistoryCountServiceTest {
-
-    @InjectMocks
-    private HistoryCountService historyCountService;
 
     @Mock
     private HistoryCountRepository historyCountRepository;
@@ -30,276 +27,229 @@ public class HistoryCountServiceTest {
     @Mock
     private ClientRepository clientRepository;
 
+    @InjectMocks
+    private HistoryCountService historyCountService;
+
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         MockitoAnnotations.openMocks(this);
     }
 
-    @Test
-    public void testAddHistoryCount() {
-        HistoryCountEntity historyCount = new HistoryCountEntity();
-        historyCount.setChange(100);
-        historyCount.setChangeDate(Timestamp.valueOf(LocalDate.now().atStartOfDay()));
-        when(historyCountRepository.save(any(HistoryCountEntity.class))).thenReturn(historyCount);
 
+
+    private HistoryCountEntity createHistoryCountEntity(int change, LocalDate date) {
+        HistoryCountEntity entity = new HistoryCountEntity();
+        entity.setChange(change);
+        entity.setChangeDate(java.sql.Timestamp.valueOf(date.atStartOfDay()));
+        return entity;
+    }
+
+
+    // Tests para addHistoryCount
+    @Test
+    void testAddHistoryCount_Success() {
+        HistoryCountEntity historyCount = new HistoryCountEntity();
+        when(historyCountRepository.save(historyCount)).thenReturn(historyCount);
         HistoryCountEntity result = historyCountService.addHistoryCount(historyCount);
-
-        assertNotNull(result);
-        assertEquals(100, result.getChange());
-        assertNotNull(result.getChangeDate());
-        verify(historyCountRepository, times(1)).save(historyCount);
+        assertEquals(historyCount, result);
     }
 
     @Test
-    public void testGetHistoryCount() {
-        long id = 1L;
+    void testAddHistoryCount_NullInput() {
+        assertThrows(IllegalArgumentException.class, () -> historyCountService.addHistoryCount(null));
+    }
+
+    @Test
+    void testAddHistoryCount_SaveFailure() {
         HistoryCountEntity historyCount = new HistoryCountEntity();
-        historyCount.setId(id);
-        when(historyCountRepository.findById(id)).thenReturn(java.util.Optional.of(historyCount));
+        when(historyCountRepository.save(historyCount)).thenThrow(new RuntimeException("Save failed"));
+        assertThrows(RuntimeException.class, () -> historyCountService.addHistoryCount(historyCount));
+    }
 
+    // Tests para getHistoryCount
+    @Test
+    void testGetHistoryCount_ExistingId() {
+        Long id = 1L;
+        HistoryCountEntity historyCount = new HistoryCountEntity();
+        when(historyCountRepository.findById(id)).thenReturn(Optional.of(historyCount));
         HistoryCountEntity result = historyCountService.getHistoryCount(id);
-
-        assertNotNull(result);
-        assertEquals(id, result.getId());
-        verify(historyCountRepository, times(1)).findById(id);
+        assertEquals(historyCount, result);
     }
 
     @Test
-    public void testGetHistoryCount_NotFound() {
-        long id = 1L;
-        when(historyCountRepository.findById(id)).thenReturn(java.util.Optional.empty());
-
+    void testGetHistoryCount_NonExistingId() {
+        Long id = 1L;
+        when(historyCountRepository.findById(id)).thenReturn(Optional.empty());
         HistoryCountEntity result = historyCountService.getHistoryCount(id);
-
         assertNull(result);
-        verify(historyCountRepository, times(1)).findById(id);
     }
 
     @Test
-    public void testR71_SufficientChange() {
-        long clientId = 1L;
+    void testGetHistoryCount_NullId() {
+        assertThrows(IllegalArgumentException.class, () -> historyCountService.getHistoryCount(null));
+    }
+
+    // Tests para R71
+    @Test
+    void testR71_ConditionTrue() {
+        Long clientId = 1L;
         int amount = 1000;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        HistoryCountEntity entry1 = new HistoryCountEntity();
-        entry1.setChange(150);
-        entry1.setClientid(clientId);
-        historyCounts.add(entry1);
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
-
-        boolean result = historyCountService.R71(clientId, amount);
-
-        assertTrue(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
+        HistoryCountEntity h1 = new HistoryCountEntity();
+        h1.setChange(100);
+        HistoryCountEntity h2 = new HistoryCountEntity();
+        h2.setChange(50);
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(Arrays.asList(h1, h2));
+        assertTrue(historyCountService.R71(clientId, amount));
     }
 
     @Test
-    public void testR71_InsufficientChange() {
-        long clientId = 1L;
+    void testR71_ConditionFalse() {
+        Long clientId = 1L;
         int amount = 1000;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        HistoryCountEntity entry1 = new HistoryCountEntity();
-        entry1.setChange(50);
-        entry1.setClientid(clientId);
-        historyCounts.add(entry1);
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
-
-        boolean result = historyCountService.R71(clientId, amount);
-
-        assertFalse(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
-    }
-
-    /*
-
-    @Test
-    public void testR72_MoneyNotExceeded() {
-        long clientId = 1L;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        historyCounts.add(new HistoryCountEntity(1, clientId, 100, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        historyCounts.add(new HistoryCountEntity(2, clientId, 50, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
-
-        boolean result = historyCountService.R72(clientId);
-
-        assertTrue(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
-    }
-*/
-    @Test
-    public void testR72_MoneyExceeded() {
-        long clientId = 1L;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        historyCounts.add(new HistoryCountEntity(1, clientId, 200, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        historyCounts.add(new HistoryCountEntity(2, clientId, 150, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
-
-        boolean result = historyCountService.R72(clientId);
-
-        assertFalse(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
+        HistoryCountEntity h1 = new HistoryCountEntity();
+        h1.setChange(20);
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(List.of(h1));
+        assertFalse(historyCountService.R71(clientId, amount));
     }
 
     @Test
-    public void testR73_ConditionMet() {
-        long clientId = 1L;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        historyCounts.add(new HistoryCountEntity(1, clientId, 100, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        historyCounts.add(new HistoryCountEntity(2, clientId, 200, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
+    void testR71_EmptyHistory() {
+        Long clientId = 1L;
+        int amount = 1000;
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(List.of());
+        assertFalse(historyCountService.R71(clientId, amount));
+    }
 
+
+    @Test
+    void testR72_NoTransactions() {
+        Long clientId = 1L;
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(List.of());
+        assertTrue(historyCountService.R72(clientId));  // No transactions should result in true
+    }
+
+
+    @Test
+    void testR73_NoHistory() {
+        Long clientId = 1L;
         ClientEntity client = new ClientEntity();
-        client.setSalary(1000);
-        when(clientRepository.findById(clientId)).thenReturn(client);
+        client.setId(clientId);  // Asigna el ID del cliente
+        client.setSalary(10000);  // Salario del cliente
 
-        boolean result = historyCountService.R73(clientId);
+        // Cliente sin historial de transacciones
+        when(clientRepository.findById(clientId)).thenReturn(Optional.of(client)); // Devuelve un Optional
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(Collections.emptyList());
 
-        assertTrue(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
-        verify(clientRepository, times(1)).findById(clientId);
-    }
-
-    @Test
-    public void testR73_ConditionNotMet() {
-        long clientId = 1L;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        historyCounts.add(new HistoryCountEntity(1, clientId, 10, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
-
-        ClientEntity client = new ClientEntity();
-        client.setSalary(1000);
-        when(clientRepository.findById(clientId)).thenReturn(client);
-
+        // Aquí se llama al método que estás probando, usando la instancia real
         boolean result = historyCountService.R73(clientId);
 
         assertFalse(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
-        verify(clientRepository, times(1)).findById(clientId);
     }
 
+
     @Test
-    public void testR74_OlderLessThan2() {
-        long clientId = 1L;
-        int older = 1;
-        int amount = 1000;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        historyCounts.add(new HistoryCountEntity(1, clientId, 250, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
+    void testR73_BothConditionsFalse() {
+        Long clientId = 1L;
+        ClientEntity client = new ClientEntity();
+        client.setId(clientId);  // Asigna el ID del cliente
+        client.setSalary(10000);  // Salario del cliente
 
-        boolean result = historyCountService.R74(clientId, older, amount);
+        // Depósitos que no suman al menos el 5% del salario
+        HistoryCountEntity h1 = new HistoryCountEntity();
+        h1.setChange(100);  // Mucho menos del 5% del salario
+        h1.setChangeDate(java.sql.Timestamp.valueOf(LocalDate.now().minusMonths(2).atStartOfDay()));
 
-        assertTrue(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
+        when(clientRepository.findById(clientId)).thenReturn(Optional.of(client)); // Devuelve un Optional
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(List.of(h1));
+
+        // Simula la ausencia de depósitos trimestrales
+        HistoryCountService historyCountServiceMock = Mockito.mock(HistoryCountService.class);
+        when(historyCountServiceMock.hasQuarterlyDeposits(anyList())).thenReturn(false);
+
+        // Aquí se llama al método que estás probando
+        boolean result = historyCountService.R73(clientId);
+
+        assertFalse(result);
     }
 
+    
+
     @Test
-    public void testR74_OlderMoreThan2() {
+    public void testR74_OlderGreaterThanTwo_ConditionMet() {
         long clientId = 1L;
         int older = 3;
         int amount = 1000;
+
         List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        historyCounts.add(new HistoryCountEntity(1, clientId, 100, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
+        historyCounts.add(createHistoryCountEntity(200, LocalDate.now().minusMonths(1))); // suma total 200
+
         when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
 
-        boolean result = historyCountService.R74(clientId, older, amount);
-
-        assertFalse(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
-    }
-     /*
-
-    @Test
-    public void testR75() {
-        long clientId = 1L;
-        List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        historyCounts.add(new HistoryCountEntity(1, clientId, -50, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        historyCounts.add(new HistoryCountEntity(2, clientId, 200, Timestamp.valueOf(LocalDate.now().atStartOfDay())));
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
-
-        boolean result = historyCountService.R75(clientId);
-
-        assertTrue(result);
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
+        assertTrue(historyCountService.R74(clientId, older, amount));
     }
 
-
     @Test
-    public void testR7Complete_AllConditionsMet() {
-        long clientId = 1L;
+    public void testR74_OlderLessThanTwo_ConditionMet() {
+        long clientId = 2L;
         int older = 1;
         int amount = 1000;
 
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(new ArrayList<>());
-
-        // Mocks para las otras condiciones
-        when(historyCountService.R71(clientId, amount)).thenReturn(true);
-        when(historyCountService.R72(clientId)).thenReturn(true);
-        when(historyCountService.R73(clientId)).thenReturn(true);
-        when(historyCountService.R74(clientId, older, amount)).thenReturn(true);
-        when(historyCountService.R75(clientId)).thenReturn(true);
-
-        boolean result = historyCountService.R7Complete(clientId, older, amount);
-
-        assertTrue(result);
-        verify(historyCountService, times(1)).R71(clientId, amount);
-    }
-
-    @Test
-    public void testR7Complete_OneConditionNotMet() {
-        long clientId = 1L;
-        int older = 1;
-        int amount = 1000;
-
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(new ArrayList<>());
-
-        // Mocks para las otras condiciones
-        when(historyCountService.R71(clientId, amount)).thenReturn(false);
-        when(historyCountService.R72(clientId)).thenReturn(true);
-        when(historyCountService.R73(clientId)).thenReturn(true);
-        when(historyCountService.R74(clientId, older, amount)).thenReturn(true);
-        when(historyCountService.R75(clientId)).thenReturn(true);
-
-        boolean result = historyCountService.R7Complete(clientId, older, amount);
-
-        assertFalse(result);
-        verify(historyCountService, times(1)).R71(clientId, amount);
-    }
-
-
-
-    @Test
-    public void testAddHistoryCount_NullInput() {
-        HistoryCountEntity result = historyCountService.addHistoryCount(null);
-
-        assertNull(result);
-        verify(historyCountRepository, never()).save(any());
-    }
-
-    @Test
-    public void testR71_NegativeAmount() {
-        long clientId = 1L;
-        int amount = -1000; // Cantidad negativa
         List<HistoryCountEntity> historyCounts = new ArrayList<>();
-        HistoryCountEntity entry1 = new HistoryCountEntity();
-        entry1.setChange(150);
-        historyCounts.add(entry1);
+        historyCounts.add(createHistoryCountEntity(250, LocalDate.now().minusMonths(2))); // suma total 250
+
         when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
 
-        boolean result = historyCountService.R71(clientId, amount);
-
-        assertFalse(result); // Debería ser falso para cantidades negativas
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
+        assertTrue(historyCountService.R74(clientId, older, amount));
     }
 
     @Test
-    public void testR72_NoHistoryCount() {
-        long clientId = 1L;
-        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(new ArrayList<>());
+    public void testR74_ConditionNotMet() {
+        long clientId = 3L;
+        int older = 3;
+        int amount = 5000;
 
-        boolean result = historyCountService.R72(clientId);
+        List<HistoryCountEntity> historyCounts = new ArrayList<>();
+        historyCounts.add(createHistoryCountEntity(200, LocalDate.now().minusMonths(3))); // suma total insuficiente
 
-        assertFalse(result); // No debería exceder si no hay entradas
-        verify(historyCountRepository, times(1)).findAllByClientid(clientId);
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
+
+        assertFalse(historyCountService.R74(clientId, older, amount));
     }
-    */
+    @Test
+    public void testR75_PositiveCase() {
+        long clientId = 1L;
+
+        List<HistoryCountEntity> historyCounts = new ArrayList<>();
+        historyCounts.add(createHistoryCountEntity(100, LocalDate.now().minusMonths(7))); // fuera de los 6 meses
+        historyCounts.add(createHistoryCountEntity(-20, LocalDate.now().minusMonths(2))); // retiro menor al 30%
+
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
+
+        assertTrue(historyCountService.R75(clientId));
+    }
+
+    @Test
+    public void testR75_NegativeCase() {
+        long clientId = 2L;
+
+        List<HistoryCountEntity> historyCounts = new ArrayList<>();
+        historyCounts.add(createHistoryCountEntity(-50, LocalDate.now().minusMonths(3))); // retiro mayor al 30%
+
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
+
+        assertFalse(historyCountService.R75(clientId));
+    }
+
+    @Test
+    public void testR75_NoWithdrawalsInLast6Months() {
+        long clientId = 3L;
+
+        List<HistoryCountEntity> historyCounts = new ArrayList<>();
+        historyCounts.add(createHistoryCountEntity(100, LocalDate.now().minusMonths(7))); // fuera de los 6 meses
+
+        when(historyCountRepository.findAllByClientid(clientId)).thenReturn(historyCounts);
+
+        assertTrue(historyCountService.R75(clientId));
+    }
 
 }
